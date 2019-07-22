@@ -111,6 +111,8 @@ import {
   saveTxs,
   loadLovefieldDB,
   reset,
+  importLovefieldDatabase,
+  exportLovefieldDatabase,
 } from './lib/storage/lovefieldDatabase';
 import type {
   FilterFunc,
@@ -232,6 +234,7 @@ export type GetTransactionsRequestOptions = {
 export type GetTransactionsRequest = {
   ...$Shape<GetTransactionsRequestOptions>,
   walletId: string,
+  isLocalRequest: boolean,
   getTransactionsHistoryForAddresses: HistoryFunc,
   checkAddressesInUse: FilterFunc,
 };
@@ -694,7 +697,7 @@ export default class AdaApi {
     const { skip = 0, limit } = request;
     try {
       const account = getCurrentCryptoAccount();
-      if (account) {
+      if (account && !request.isLocalRequest) {
         const existingTxs = await getTxsOrderedByLastUpdateDesc();
         const newTxs = await refreshTxs(
           account.root_cached_key,
@@ -1378,6 +1381,15 @@ export default class AdaApi {
 
   migrate = async (localstorageApi: LocalStorageApi): Promise<void> => {
     await migrateToLatest(localstorageApi);
+  }
+
+  importLocalDatabase = async (data: any): Promise<void> => {
+    importLovefieldDatabase(data);
+  }
+
+  exportLocalDatabase = async (): Promise<string> => {
+    const data = await exportLovefieldDatabase();
+    return JSON.stringify(data);
   }
 }
 // ========== End of class AdaApi =========

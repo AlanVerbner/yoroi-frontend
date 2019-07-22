@@ -2,18 +2,19 @@
 
 import { Before, BeforeAll, Given, Then, After, AfterAll, setDefinitionFunctionWrapper, setDefaultTimeout } from 'cucumber';
 import { getMockServer, closeMockServer } from '../mock-chain/mockServer';
-import i18nHelper from '../support/helpers/i18n-helpers';
 import { By } from 'selenium-webdriver';
 import { enterRecoveryPhrase, assertPlate } from './wallet-restoration-steps';
 import { testWallets } from '../mock-chain/TestWallets';
-import { resetChain } from '../mock-chain/mockImporter';
+import { resetChain, serverIssue, serverFixed } from '../mock-chain/mockImporter';
 import { expect } from 'chai';
+import { navigateToTransactionsList } from '../support/helpers/route-helpers';
 
 const { promisify } = require('util');
 const fs = require('fs');
 const rimraf = require('rimraf');
 
 const screenshotsDir = './screenshots/';
+const snapshotsDir = './features/yoroi_snapshots/';
 
 /** We need to keep track of our progress in testing to give unique names to screenshots */
 const testProgress = {
@@ -42,6 +43,22 @@ Before((scenario) => {
 
   // reset our mock chain to avoid modifications bleeding into other tests
   resetChain();
+});
+
+Before({ tags: '@serverDown' }, () => {
+  closeMockServer();
+});
+
+After({ tags: '@serverDown' }, () => {
+  getMockServer({});
+});
+
+Before({ tags: '@serverMaintenance' }, () => {
+  serverIssue();
+});
+
+After({ tags: '@serverMaintenance' }, () => {
+  serverFixed();
 });
 
 Before({ tags: '@invalidWitnessTest' }, () => {
@@ -130,16 +147,22 @@ Given(/^There is a wallet stored named ([^"]*)$/, async function (walletName) {
 });
 
 Given(/^I have completed the basic setup$/, async function () {
-  // Default Profile Configs (language and terms of use)
+  // langauge select page
   await this.waitForElement('.LanguageSelectionForm_component');
-
-  await i18nHelper.setActiveLanguage(this.driver);
-
   await this.click('.LanguageSelectionForm_submitButton');
+
+  // ToS page
   await this.waitForElement('.TermsOfUseForm_component');
-  await this.driver.executeScript(() => {
-    window.yoroi.actions.profile.acceptTermsOfUse.trigger();
-  });
+  await this.click('.SimpleCheckbox_check');
+  await this.click('.TermsOfUseForm_submitButton');
+
+  // uri prompt page
+  if (this.getBrowser() !== 'firefox') {
+    await this.waitForElement('.UriPromptForm_component');
+    await this.click('.allowButton');
+    await this.waitForElement('.UriAccept_component');
+    await this.click('.finishButton');
+  }
 });
 
 Given(/^I have opened the extension$/, async function () {
@@ -166,11 +189,81 @@ Then(/^I click then button labeled (.*)$/, async function (buttonName) {
   await this.click(`//button[contains(text(), ${buttonName})]`, By.xpath);
 });
 
+Given(/^I export a snapshot named ([^"]*)$/, async function (snapshotName) {
+  await exportYoroiSnapshot(this, snapshotsDir.concat(snapshotName));
+});
+
+Given(/^I import a snapshot named ([^"]*)$/, async function (snapshotName) {
+  await importYoroiSnapshot(this, snapshotsDir.concat(snapshotName));
+  await migrateImportedSnapshot(this);
+  await navigateToTransactionsList(this);
+  await refreshWallet(this);
+});
 
 function refreshWallet(client) {
-  return client.driver.executeAsyncScript((done) => {
+  return client.driver.executeScript((done) => {
     window.yoroi.stores.substores.ada.wallets.refreshWalletsData()
       .then(done)
       .catch(err => done(err));
+  });
+}
+
+async function exportYoroiSnapshot(client, exportDir: string) {
+  if (!fs.existsSync(exportDir)) {
+    fs.mkdirSync(exportDir);
+  }
+  exportLocalStorage(client, exportDir);
+  exportIndexedDB(client, exportDir);
+}
+
+async function exportLocalStorage(client, exportDir: string) {
+  const localStoragePath = `${exportDir}/localStorage.json`;
+  const localStorage = await client.driver.executeAsyncScript((done) => {
+    window.yoroi.api.localStorage.getLocalStorage()
+      .then(done)
+      .catch(err => done(err));
+  });
+  await writeFile(localStoragePath, localStorage);
+}
+
+async function exportIndexedDB(client, exportDir: string) {
+  const indexedDBPath = `${exportDir}/indexedDB.json`;
+  const indexedDB = await client.driver.executeAsyncScript((done) => {
+    window.yoroi.api.ada.exportLocalDatabase()
+      .then(done)
+      .catch(err => done(err));
+  });
+  await writeFile(indexedDBPath, indexedDB);
+}
+
+async function importYoroiSnapshot(client, importDir: string) {
+  if (!fs.existsSync(importDir)) {
+    throw new Error('The directory must exists!');
+  }
+  importLocalStorage(client, importDir);
+  importIndexedDB(client, importDir);
+}
+
+async function importLocalStorage(client, importDir: string) {
+  const localStoragePath = `${importDir}/localStorage.json`;
+  const localStorageData = fs.readFileSync(localStoragePath);
+  await client.driver.executeScript((data) => {
+    window.yoroi.api.localStorage.setLocalStorage(data);
+    // $FlowFixMe Flow thinks that localStorageData is of type Buffer
+  }, JSON.parse(localStorageData));
+}
+
+async function importIndexedDB(client, importDir: string) {
+  const indexedDBPath = `${importDir}/indexedDB.json`;
+  const indexedDBData = fs.readFileSync(indexedDBPath);
+  await client.driver.executeScript((data) => {
+    window.yoroi.api.ada.importLocalDatabase(data);
+    // $FlowFixMe Flow thinks that indexedDBData is of type Buffer
+  }, JSON.parse(indexedDBData));
+}
+
+async function migrateImportedSnapshot(client) {
+  return client.driver.executeScript(() => {
+    window.yoroi.actions.snapshot.migrateImportedSnapshot.trigger({});
   });
 }

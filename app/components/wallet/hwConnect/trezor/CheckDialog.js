@@ -10,6 +10,7 @@ import LocalizableError from '../../../../i18n/LocalizableError';
 
 import Dialog from '../../../widgets/Dialog';
 import DialogCloseButton from '../../../widgets/DialogCloseButton';
+import DialogBackButton from '../../../widgets/DialogBackButton';
 
 import ProgressStepBlock from '../common/ProgressStepBlock';
 import HelpLinkBlock from './HelpLinkBlock';
@@ -25,20 +26,16 @@ import { ProgressInfo } from '../../../../types/HWConnectStoreTypes';
 import styles from '../common/CheckDialog.scss';
 
 const messages = defineMessages({
-  aboutPrerequisite1Part1: {
+  aboutPrerequisite1Part1Text: {
     id: 'wallet.connect.trezor.dialog.step.about.prerequisite.1.part1',
-    defaultMessage: '!!!Only Supports',
-  },
-  aboutPrerequisite1Part2Link: {
-    id: 'wallet.connect.trezor.dialog.step.about.prerequisite.1.part2.link',
-    defaultMessage: '!!!https://github.com/trezor/trezor-core/blob/master/ChangeLog',
-  },
-  aboutPrerequisite1Part2LinkText: {
-    id: 'wallet.connect.trezor.dialog.step.about.prerequisite.1.part2.link.text',
     defaultMessage: '!!!Trezor Model T with version 2.0.8',
   },
-  aboutPrerequisite1Part3: {
-    id: 'wallet.connect.trezor.dialog.step.about.prerequisite.1.part3',
+  aboutPrerequisite1Part1Link: {
+    id: 'wallet.connect.trezor.dialog.step.about.prerequisite.1.part1.link',
+    defaultMessage: '!!!https://shop.trezor.io/product/trezor-model-t',
+  },
+  aboutPrerequisite1Part2: {
+    id: 'wallet.connect.trezor.dialog.step.about.prerequisite.1.part2',
     defaultMessage: '!!!or later',
   },
   aboutPrerequisite2: {
@@ -62,6 +59,7 @@ type Props = {|
   onExternalLinkClick: Function,
   submit: Function,
   cancel: Function,
+  onBack: void => void,
   classicTheme: boolean,
 |};
 
@@ -97,15 +95,14 @@ export default class CheckDialog extends Component<Props> {
           </div>
           <ul>
             <li key="1">
-              {intl.formatMessage(messages.aboutPrerequisite1Part1)}
               <a
-                href={intl.formatMessage(messages.aboutPrerequisite1Part2Link)}
+                href={intl.formatMessage(messages.aboutPrerequisite1Part1Link)}
                 onClick={event => onExternalLinkClick(event)}
               >
-                {intl.formatMessage(messages.aboutPrerequisite1Part2LinkText) + ' '}
+                {intl.formatMessage(messages.aboutPrerequisite1Part1Text) + ' '}
                 <SvgInline svg={externalLinkSVG} />
               </a>
-              {intl.formatMessage(messages.aboutPrerequisite1Part3)}
+              {intl.formatMessage(messages.aboutPrerequisite1Part2)}
             </li>
             <li key="2">{intl.formatMessage(messages.aboutPrerequisite2)}</li>
             <li key="3">{intl.formatMessage(messages.aboutPrerequisite3)}</li>
@@ -136,6 +133,7 @@ export default class CheckDialog extends Component<Props> {
         actions={dailogActions}
         closeOnOverlayClick={false}
         closeButton={<DialogCloseButton />}
+        backButton={<DialogBackButton onBack={this.props.onBack} />}
         onClose={cancel}
         classicTheme={classicTheme}
       >

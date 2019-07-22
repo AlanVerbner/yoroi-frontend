@@ -1,5 +1,3 @@
-// @flow
-
 // Client-side database to avoid having to query Yoroi servers when state doesn't change
 
 // $FlowFixMe Flow doesn't like lovefield
@@ -108,6 +106,13 @@ export const loadLovefieldDB = () => {
     return db;
   });
 };
+
+export const importLovefieldDatabase = async (data: object): Promise<void> => {
+  await reset();
+  db.import(data);
+};
+
+export const exportLovefieldDatabase = async (): Promise<object> => db.export();
 
 export const reset = (): Promise<void> => {
   const txsTable = _getTxsTable();

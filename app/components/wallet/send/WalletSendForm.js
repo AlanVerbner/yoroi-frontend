@@ -7,18 +7,19 @@ import classnames from 'classnames';
 import { Button } from 'react-polymorph/lib/components/Button';
 import { ButtonSkin } from 'react-polymorph/lib/skins/simple/ButtonSkin';
 import { Input } from 'react-polymorph/lib/components/Input';
-import { InputSkin } from 'react-polymorph/lib/skins/simple/InputSkin';
 import { NumericInput } from 'react-polymorph/lib/components/NumericInput';
 import { Checkbox } from 'react-polymorph/lib/components/Checkbox';
 import { CheckboxSkin } from 'react-polymorph/lib/skins/simple/CheckboxSkin';
 import { defineMessages, intlShape } from 'react-intl';
 import BigNumber from 'bignumber.js';
 import ReactToolboxMobxForm from '../../../utils/ReactToolboxMobxForm';
+import vjf from 'mobx-react-form/lib/validators/VJF';
 import AmountInputSkin from '../skins/AmountInputSkin';
 import BorderedBox from '../../widgets/BorderedBox';
 import styles from './WalletSendForm.scss';
 import globalMessages, { environmentSpecificMessages } from '../../../i18n/global-messages';
 import environment from '../../../environment';
+import type { UriParams } from '../../../utils/URIHandling';
 
 import {
   formattedWalletAmount,
@@ -29,7 +30,7 @@ import config from '../../../config';
 import { InputOwnSkin } from '../../../themes/skins/InputOwnSkin';
 import LocalizableError from '../../../i18n/LocalizableError';
 
-import WarningBox from '../../widgets/forms/WarningBox';
+import WarningBox from '../../widgets/WarningBox';
 
 const messages = defineMessages({
   titleLabel: {
@@ -112,6 +113,8 @@ type Props = {|
   isCalculatingFee: boolean,
   reset: void => void,
   error: ?LocalizableError,
+  uriParams: ?UriParams,
+  resetUriParams: void => void,
 |};
 
 @observer
@@ -125,6 +128,15 @@ export default class WalletSendForm extends Component<Props> {
 
   componentDidMount() {
     this.props.reset();
+    if (this.props.uriParams) {
+      // assert not null
+      const uriParams = this.props.uriParams;
+      const adjustedAmount = formattedAmountToNaturalUnits(uriParams.amount.toString());
+      // note: assume these are validated externally
+      this.props.updateAmount(Number(adjustedAmount));
+      this.props.updateReceiver(uriParams.address);
+      this.props.resetUriParams();
+    }
 
     /**
      * Mobx-react-form doesn't allow the value field to be updated based on a computed variable
@@ -163,7 +175,9 @@ export default class WalletSendForm extends Component<Props> {
       receiver: {
         label: this.context.intl.formatMessage(messages.receiverLabel),
         placeholder: this.context.intl.formatMessage(messages.receiverHint),
-        value: '',
+        value: this.props.uriParams
+          ? this.props.uriParams.address
+          : '',
         validators: [({ field }) => {
           const receiverValue = field.value;
           if (receiverValue === '') {
@@ -184,7 +198,9 @@ export default class WalletSendForm extends Component<Props> {
       amount: {
         label: this.context.intl.formatMessage(messages.amountLabel),
         placeholder: `0.${'0'.repeat(this.props.currencyMaxFractionalDigits)}`,
-        value: '',
+        value: this.props.uriParams
+          ? formattedWalletAmount(this.props.uriParams.amount)
+          : '',
         validators: [async ({ field }) => {
           if (this.props.shouldSendAll) {
             // sendall doesn't depend on the amount so always succeed
@@ -208,9 +224,14 @@ export default class WalletSendForm extends Component<Props> {
     },
   }, {
     options: {
+      // if fields are pre-populated by URI, validate them right away
+      showErrorsOnInit: this.props.uriParams,
       validateOnBlur: false,
       validateOnChange: true,
       validationDebounceWait: config.forms.FORM_VALIDATION_DEBOUNCE_WAIT,
+    },
+    plugins: {
+      vjf: vjf()
     },
   });
 
@@ -236,9 +257,11 @@ export default class WalletSendForm extends Component<Props> {
       || formattedAmountToBigNumber(amountFieldProps.value);
 
     const pendingTxWarningComponent = (
-      <WarningBox>
-        {intl.formatMessage(messages.sendingIsDisabled)}
-      </WarningBox>
+      <div className={styles.warningBox}>
+        <WarningBox>
+          {intl.formatMessage(messages.sendingIsDisabled)}
+        </WarningBox>
+      </div>
     );
     const currency = intl.formatMessage(environmentSpecificMessages[environment.API].currency);
 
@@ -263,7 +286,8 @@ export default class WalletSendForm extends Component<Props> {
               className="receiver"
               {...receiverField.bind()}
               error={receiverField.error}
-              skin={classicTheme ? InputSkin : InputOwnSkin}
+              skin={InputOwnSkin}
+              done={receiverField.isValid}
             />
           </div>
 
